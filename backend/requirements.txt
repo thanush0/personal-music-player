@@ -1,0 +1,13 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+mutagen==1.47.0
+pillow==10.1.0
+python-dotenv==1.0.0
+pydantic==2.5.0
+aiofiles==23.2.1
+sqlalchemy==2.0.23
+yt-dlp==2024.12.13
+ffmpeg-python==0.2.0
+lyricsgenius==3.0.1
+requests==2.31.0

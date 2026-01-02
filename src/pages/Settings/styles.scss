@@ -1,0 +1,152 @@
+.settings-page {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+  
+  .settings-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 30px;
+    
+    h1 {
+      font-size: 32px;
+      font-weight: bold;
+      color: white;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+  }
+  
+  .settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .settings-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    
+    .ant-card-head {
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      
+      .ant-card-head-title {
+        color: white;
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+    }
+    
+    .ant-card-body {
+      padding: 24px;
+    }
+  }
+  
+  .setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    
+    .setting-info {
+      flex: 1;
+      
+      h3 {
+        color: white;
+        font-size: 16px;
+        font-weight: 500;
+        margin: 0 0 4px 0;
+      }
+      
+      p {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 14px;
+        margin: 0;
+      }
+    }
+  }
+  
+  .ant-divider {
+    background: rgba(255, 255, 255, 0.1);
+    margin: 16px 0;
+  }
+  
+  .settings-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 30px;
+    padding-bottom: 40px;
+    
+    .ant-btn-primary {
+      height: 48px;
+      padding: 0 40px;
+      font-size: 16px;
+      border-radius: 24px;
+      background: #1db954;
+      border: none;
+      
+      &:hover {
+        background: #1ed760;
+      }
+    }
+  }
+  
+  // Dark theme adjustments
+  .ant-select {
+    .ant-select-selector {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+    
+    .ant-select-arrow {
+      color: rgba(255, 255, 255, 0.6);
+    }
+  }
+  
+  .ant-switch {
+    &.ant-switch-checked {
+      background: #1db954;
+    }
+  }
+  
+  .ant-btn:not(.ant-btn-primary) {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 10px;
+    
+    .settings-header h1 {
+      font-size: 24px;
+    }
+    
+    .setting-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      
+      .ant-select,
+      .ant-switch,
+      .ant-btn {
+        align-self: flex-end;
+      }
+    }
+  }
+}

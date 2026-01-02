@@ -1,0 +1,43 @@
+// variable desktop breakpoint
+$desktop-breakpoint: 768px;
+$desktop-small-breakpoint: 900px;
+
+// color palette - Enhanced Spotify Theme
+
+// Background colors
+$background-color: #121212;
+$background-base: #000000;
+$background-elevated: #181818;
+$background-highlight: #1a1a1a;
+$background-tinted: rgba(255, 255, 255, 0.07);
+$background-press: rgba(255, 255, 255, 0.1);
+
+// Spotify Green (Primary Action Color)
+$spotify-green: #1ed760;
+$spotify-green-hover: #1fdf64;
+$spotify-green-active: #169c46;
+$spotify-green-bright: #1db954;
+
+// Text colors
+$text-primary-color: white;
+$text-secondary-color: #b3b3b3;
+$text-subdued: #6a6a6a;
+$text-bright: #ffffff;
+
+// Essential colors
+$essential-base: #ffffff;
+$essential-subdued: #727272;
+$essential-negative: #f15e6c;
+$essential-warning: #ffa42b;
+$essential-positive: $spotify-green;
+$essential-announcement: #3d91f4;
+
+// Component specific
+$container-border-radius: 8px;
+$card-border-radius: 6px;
+$button-border-radius: 500px;
+
+// Shadows
+$shadow-base: 0 2px 4px 0 rgba(0, 0, 0, 0.2);
+$shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+$shadow-overlay: 0 16px 24px rgba(0, 0, 0, 0.3), 0 6px 8px rgba(0, 0, 0, 0.2);
