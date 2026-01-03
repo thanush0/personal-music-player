@@ -36,14 +36,18 @@ const AudioEnhancementControl: React.FC = () => {
 
   const checkEnhancedVersion = async (trackId: string) => {
     try {
-      const response = await axios.get(`http://localhost:8000/tracks/${trackId}/versions`);
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await axios.get(`${API_URL}/tracks/${trackId}/versions`);
       const hasEnhancedVersion = !!response.data.enhanced;
       setHasEnhanced(hasEnhancedVersion);
       if (hasEnhancedVersion) {
         setCurrentPreset(response.data.enhanced.preset || 'atmos');
       }
-    } catch (error) {
-      console.error('Failed to check enhanced version:', error);
+    } catch (error: any) {
+      // Silently fail - not all tracks have enhanced versions
+      if (process.env.NODE_ENV === 'development' && process.env.REACT_APP_DEBUG === 'true') {
+        console.log('Enhanced version check:', error?.message || String(error));
+      }
       setHasEnhanced(false);
     }
   };
@@ -53,13 +57,14 @@ const AudioEnhancementControl: React.FC = () => {
     
     setIsEnhancing(true);
     try {
-      await axios.post(`http://localhost:8000/tracks/${currentTrack.id}/enhance?preset=${preset}`);
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      await axios.post(`${API_URL}/tracks/${currentTrack.id}/enhance?preset=${preset}`);
       setHasEnhanced(true);
       setCurrentPreset(preset);
       setUseEnhanced(true);
       
-      // Reload the track with enhanced version
-      window.location.reload();
+      // DO NOT reload - quality switching should be seamless
+      // Enhanced audio will be available on next quality switch
     } catch (error) {
       console.error('Enhancement failed:', error);
       alert('Failed to enhance track. Make sure FFmpeg is installed on the backend.');
@@ -72,10 +77,18 @@ const AudioEnhancementControl: React.FC = () => {
     if (!currentTrack?.id) return;
     
     try {
-      await axios.delete(`http://localhost:8000/tracks/${currentTrack.id}/enhanced`);
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      await axios.delete(`${API_URL}/tracks/${currentTrack.id}/enhanced`);
       setHasEnhanced(false);
       setUseEnhanced(false);
-      window.location.reload();
+      
+      // Switch back to standard quality without reload
+      try {
+        const { localPlayerService } = await import('../../../../services/localPlayer');
+        await localPlayerService.switchQuality('standard');
+      } catch (error) {
+        console.error('Failed to switch to standard quality:', error);
+      }
     } catch (error) {
       console.error('Failed to delete enhanced version:', error);
     }

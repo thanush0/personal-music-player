@@ -16,8 +16,13 @@ export interface PlaybackState {
 }
 
 class LocalPlayerService {
+  // Debug logging controls
+  private debugLastLogTs: number = 0;
+  private debugLastTrackId: string | null = null;
+  private metadataCache: Map<string, any> = new Map();
+  private lyricsCache: Map<string, string> = new Map();
   private audioPlayer = getAudioPlayer();
-  private currentTrack: any = null;
+  private currentTrack: any = null; // normalized track + legacy compatibility fields
   private queue: any[] = [];
   private currentIndex: number = 0;
   private shuffle: boolean = false;
@@ -52,6 +57,28 @@ class LocalPlayerService {
   private emitPlaybackState() {
     if (this.stateChangeCallback && this.currentTrack) {
       const state = this.audioPlayer.getState();
+
+      // Development-only, flag-gated, and throttled logging (2s), always on track change
+      if (
+        process.env.NODE_ENV === 'development' &&
+        process.env.REACT_APP_DEBUG === 'true'
+      ) {
+        const now = Date.now();
+        const trackId: string = this.currentTrack.id;
+        const trackChanged = this.debugLastTrackId !== trackId;
+        if (trackChanged || now - this.debugLastLogTs >= 2000) {
+          // Lightweight snapshot for readability
+          console.log('[DEBUG] emitPlaybackState:', {
+            trackId,
+            paused: state.paused,
+            position: state.position,
+            duration: state.duration,
+          });
+          this.debugLastLogTs = now;
+          this.debugLastTrackId = trackId;
+        }
+      }
+
       this.stateChangeCallback({
         is_playing: !state.paused,
         position_ms: state.position,
@@ -100,29 +127,89 @@ class LocalPlayerService {
   }
 
   private async playTrack(track: any) {
-    // Fetch full track data with assets from backend
+    // track may be an id-only object or partial; ensure we have an id
+
+    // Always fetch full track data from backend to ensure we have lyrics and covers
     try {
-      const response = await axios.get(`${API_URL}/tracks/${track.id}`);
-      const fullTrack = response.data;
+      // Fetch metadata.json-backed track payload (cache-aware)
+      let fullTrack: any;
+      if (this.metadataCache.has(track.id)) {
+        fullTrack = this.metadataCache.get(track.id);
+        if (process.env.NODE_ENV === 'development' && process.env.REACT_APP_DEBUG === 'true') {
+          console.log('[DEBUG] Track fetched from cache:', track.id);
+        }
+      } else {
+        const response = await axios.get(`${API_URL}/tracks/${track.id}`);
+        fullTrack = response.data;
+        this.metadataCache.set(track.id, fullTrack);
+        if (process.env.NODE_ENV === 'development' && process.env.REACT_APP_DEBUG === 'true') {
+          console.log('[DEBUG] Fetched full track:', { id: track.id, hasLyrics: fullTrack.hasLyrics });
+        }
+      }
       
-      // Enrich track with asset URLs and metadata
+      // Normalize to required frontend model based on metadata.json
+      const id = fullTrack.trackId || track.id;
+      const title = fullTrack.title || fullTrack.name || track.name || '';
+      const artistName = fullTrack.artist || (fullTrack.artists?.[0]?.name) || (track.artists?.[0]?.name) || '';
+      const albumName = fullTrack.album || fullTrack.album?.name || track.album?.name || '';
+      const durationSec = fullTrack.duration || Math.floor((fullTrack.duration_ms || track.duration_ms || 0) / 1000);
+
+      const availableQualities: ('standard'|'enhanced')[] = fullTrack.availableQualities || (fullTrack.has_enhanced_version ? ['standard','enhanced'] : ['standard']);
+
+      const audioUrlsByQuality: Record<string,string> = {
+        standard: `${API_URL}/tracks/${id}/stream?quality=standard`,
+      };
+      if (availableQualities.includes('enhanced')) {
+        audioUrlsByQuality.enhanced = `${API_URL}/tracks/${id}/stream?quality=enhanced`;
+      }
+
+      const normalized = {
+        trackId: id,
+        title,
+        artist: artistName,
+        album: albumName,
+        duration: durationSec,
+        audioUrl: audioUrlsByQuality.standard,
+        availableQualities,
+        audioUrlsByQuality,
+        coverUrl: `${API_URL}/tracks/${id}/cover`,
+        canvasUrl: fullTrack.canvasFile ? `${API_URL}/tracks/${id}/animated-cover` : `${API_URL}/tracks/${id}/animated-cover`,
+        hasLyrics: !!fullTrack.hasLyrics,
+        lyricsType: fullTrack.lyricsType || (fullTrack.hasLyrics ? 'lrc' : null),
+        lyricsUrl: fullTrack.hasLyrics ? `${API_URL}/tracks/${id}/lyrics` : undefined,
+        source: 'local' as const,
+      };
+
+      // Log normalized track (gated by debug flag)
+      if (process.env.NODE_ENV === 'development' && process.env.REACT_APP_DEBUG === 'true') {
+        console.log('[DEBUG] Track normalized:', { trackId: normalized.trackId, hasLyrics: normalized.hasLyrics, duration: normalized.duration });
+      }
+
+      // Maintain legacy fields for UI components expecting Spotify-like objects
       this.currentTrack = {
         ...track,
-        // Add local asset URLs
-        cover_url: fullTrack.cover_url || `${API_URL}/tracks/${track.id}/cover`,
-        animated_cover_url: fullTrack.animated_cover_url || null,
-        lyrics: fullTrack.lyrics || null,
-        has_enhanced_version: fullTrack.has_enhanced_version || false,
+        id,
+        name: title,
+        artists: track.artists || fullTrack.artists || [{ name: artistName, uri: `local:artist:${artistName}` }],
+        album: track.album || fullTrack.album || { name: albumName, images: [] },
+        duration_ms: (fullTrack.duration_ms ?? track.duration_ms ?? durationSec * 1000),
+        uri: track.uri || `local:track:${id}`,
+        cover_url: normalized.coverUrl,
+        animated_cover_url: null, // Canvas derived via endpoint, handled by components
+        lyrics: undefined, // lyrics fetched via endpoint on demand
+        has_enhanced_version: availableQualities.includes('enhanced'),
         enhancement_preset: fullTrack.enhancement_preset || null,
+        // Attach normalized shape
+        normalized,
       };
-    } catch (error) {
-      console.error('Failed to fetch full track metadata:', error);
+    } catch (error: any) {
+      console.error('LocalPlayerService - Failed to fetch full track metadata:', error);
       // Fall back to basic track data
       this.currentTrack = track;
     }
     
     // Use quality parameter in stream URL to support quality switching
-    const streamUrl = `${API_URL}/tracks/${track.id}/stream?quality=${this.currentQuality}`;
+    const streamUrl = `${API_URL}/tracks/${this.currentTrack.id}/stream?quality=${this.currentQuality}`;
     
     try {
       await this.audioPlayer.loadTrack(track.id, streamUrl);

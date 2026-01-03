@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Input, Select, Card, message, Progress, Typography, Space, Alert } from 'antd';
+import { Button, Input, Select, Card, App, Progress, Typography, Space, Alert } from 'antd';
 import { DownloadOutlined, YoutubeOutlined, LoadingOutlined } from '@ant-design/icons';
 import axios from '../../axios';
 import './styles.scss';
@@ -17,6 +17,7 @@ interface VideoInfo {
 }
 
 export const Download = () => {
+  const { message } = App.useApp();
   const [url, setUrl] = useState('');
   const [format, setFormat] = useState('mp3');
   const [quality, setQuality] = useState('best');

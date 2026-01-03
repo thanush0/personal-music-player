@@ -44,7 +44,7 @@ class YouTubeDownloader:
         return None, video_title.strip()
     
     async def fetch_lyrics(self, artist: str, title: str) -> Optional[str]:
-        """Fetch lyrics from various sources"""
+        """Fetch lyrics from various sources and clean structural tags"""
         try:
             # Clean up artist and title
             artist = re.sub(r'\s*\(.*?\)\s*', '', artist).strip()  # Remove parentheses
@@ -66,11 +66,62 @@ class YouTubeDownloader:
                 return None
             
             lyrics = await loop.run_in_executor(self.executor, _fetch)
+            
+            if lyrics:
+                # Clean structural tags like [Verse 1], [Chorus], etc.
+                # These are NOT timestamps - they're just section markers
+                cleaned_lyrics = self._clean_structural_tags(lyrics)
+                return cleaned_lyrics
+            
             return lyrics
             
         except Exception as e:
             print(f"Error fetching lyrics: {e}")
             return None
+    
+    def _clean_structural_tags(self, lyrics: str) -> str:
+        """
+        Remove structural tags like [Verse 1], [Chorus], etc. from plain text lyrics
+        Keeps timestamp-based tags like [00:12.34] for synced lyrics
+        """
+        lines = lyrics.split('\n')
+        cleaned = []
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Skip empty lines
+            if not stripped:
+                cleaned.append('')
+                continue
+            
+            # Check if this is a structural tag (NOT a timestamp)
+            # Timestamps: [MM:SS.cc] or [MM:SS] - contain colons and numbers
+            # Structural: [Verse 1], [Chorus], [Bridge], etc. - contain words
+            structural_pattern = r'^\[(Verse|Chorus|Bridge|Intro|Outro|Pre-Chorus|Hook|Interlude|Break|Breakdown|Fade|Refrain|Coda|Instrumental|Rap|Ad-Lib)'
+            timestamp_pattern = r'^\[\d{2}:\d{2}'
+            
+            # If it's a structural tag (not a timestamp), skip it
+            if re.match(structural_pattern, stripped, re.IGNORECASE):
+                if not re.match(timestamp_pattern, stripped):
+                    print(f"[LYRICS] Filtering structural tag: {stripped}")
+                    continue
+            
+            cleaned.append(line)
+        
+        # Remove consecutive empty lines
+        result = []
+        prev_empty = False
+        for line in cleaned:
+            if line.strip() == '':
+                if not prev_empty:
+                    result.append(line)
+                    prev_empty = True
+            else:
+                result.append(line)
+                prev_empty = False
+        
+        return '\n'.join(result)
     
     async def get_video_info(self, url: str) -> Optional[Dict]:
         """Get video information without downloading"""
@@ -148,13 +199,14 @@ class YouTubeDownloader:
             
             audio_quality = quality_map.get(quality, '0')
             
-            # Output template
-            output_template = str(self.output_folder / '%(title)s.%(ext)s')
+            # Output template - use absolute path to ensure yt-dlp doesn't use default location
+            output_template = str(self.output_folder.resolve() / '%(title)s.%(ext)s')
             
             # yt-dlp options
             ydl_opts = {
                 'format': 'bestaudio/best',
                 'outtmpl': output_template,
+                'paths': {'home': str(self.output_folder.resolve())},  # Force output directory
                 'quiet': False,
                 'no_warnings': False,
                 'extract_audio': True,
@@ -212,13 +264,25 @@ class YouTubeDownloader:
                     if info:
                         title = self._sanitize_filename(info['title'])
                         filename = f"{title}.{format}"
-                        filepath = self.output_folder / filename
+                        filepath = self.output_folder.resolve() / filename
                         
                         # Sometimes yt-dlp uses a different name
                         if not filepath.exists():
                             # Find the downloaded file
-                            for file in self.output_folder.glob(f"*{title}*.{format}"):
+                            for file in self.output_folder.resolve().glob(f"*{title}*.{format}"):
                                 return str(file)
+                            
+                            # Fallback: check if file went to user's Music folder (common yt-dlp bug)
+                            from pathlib import Path as PathLib
+                            music_folder = PathLib.home() / 'Music'
+                            if music_folder.exists():
+                                for file in music_folder.glob(f"*{title}*.{format}"):
+                                    # Move it to correct location
+                                    import shutil
+                                    target = self.output_folder.resolve() / file.name
+                                    print(f"Moving file from {file} to {target}")
+                                    shutil.move(str(file), str(target))
+                                    return str(target)
                         
                         return str(filepath)
                 return None

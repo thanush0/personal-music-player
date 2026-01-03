@@ -34,6 +34,8 @@ class TrackResponse(BaseModel):
     has_enhanced_version: bool = False
     enhanced_file_path: Optional[str] = None
     enhancement_preset: Optional[str] = None
+    has_lyrics: bool = False  # NEW: Indicates if lyrics are available
+    lyrics: Optional[str] = None  # NEW: Actual lyrics content (if fetched)
 
 
 class Album(BaseModel):

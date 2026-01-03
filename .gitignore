@@ -1,18 +1,9 @@
-# Python
 __pycache__/
 *.pyc
+*.log
+_temp_download/
 .env
-
-# Node
 node_modules/
 dist/
-
-# Database
-*.db
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
+build/
+music_downloader.log

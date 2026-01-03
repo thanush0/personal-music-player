@@ -60,9 +60,13 @@ from fastapi.middleware.cors import CORSMiddleware as _CORS
 @app.middleware("http")
 async def add_cors_headers(request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith("/covers/") or request.url.path.startswith("/images/"):
+    # Add CORS headers for media endpoints
+    if (request.url.path.startswith("/covers/") or 
+        request.url.path.startswith("/images/") or
+        "/cover" in request.url.path or 
+        "/animated-cover" in request.url.path):
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
     return response
 
@@ -111,12 +115,33 @@ async def get_track(track_id: str):
         if cover_file.exists():
             track["cover_url"] = f"http://localhost:8000/tracks/{track_id}/cover"
         
-        # Check for animated_cover.mp4
+        # Check for canvas.mp4 (preferred) or animated_cover.mp4 (fallback)
+        canvas_file = folder / "canvas.mp4"
         animated_cover = folder / "animated_cover.mp4"
-        if animated_cover.exists():
+        
+        if canvas_file.exists():
+            track["animated_cover_url"] = f"http://localhost:8000/tracks/{track_id}/animated-cover"
+        elif animated_cover.exists():
             track["animated_cover_url"] = f"http://localhost:8000/tracks/{track_id}/animated-cover"
         
-        # Lyrics are already in the track data from database
+        # Check for lyrics file (lyrics.lrc) - load dynamically if not in database
+        if not track.get("lyrics"):
+            lyrics_file = folder / "lyrics.lrc"
+            print(f"[LYRICS DEBUG] Checking for lyrics file: {lyrics_file}")
+            print(f"[LYRICS DEBUG] File exists: {lyrics_file.exists()}")
+            if lyrics_file.exists():
+                try:
+                    with open(lyrics_file, 'r', encoding='utf-8') as f:
+                        lyrics_content = f.read()
+                        track["lyrics"] = lyrics_content
+                        print(f"[LYRICS DEBUG] Successfully loaded lyrics ({len(lyrics_content)} characters)")
+                        print(f"[LYRICS DEBUG] First 100 chars: {lyrics_content[:100]}")
+                except Exception as e:
+                    print(f"[LYRICS DEBUG] Error reading lyrics file for track {track_id}: {e}")
+            else:
+                print(f"[LYRICS DEBUG] No lyrics.lrc file found in folder: {folder}")
+        else:
+            print(f"[LYRICS DEBUG] Lyrics already in database ({len(track.get('lyrics', ''))} characters)")
     
     return track
 
@@ -155,6 +180,8 @@ async def stream_track(track_id: str, quality: str = Query("standard", pattern="
 
 
 @app.get("/tracks/{track_id}/cover")
+@app.head("/tracks/{track_id}/cover")
+@app.options("/tracks/{track_id}/cover")
 async def get_track_cover(track_id: str):
     """Get cover image for a track"""
     track = db.get_track(track_id)
@@ -174,31 +201,91 @@ async def get_track_cover(track_id: str):
 
 
 @app.get("/tracks/{track_id}/animated-cover")
+@app.head("/tracks/{track_id}/animated-cover")
+@app.options("/tracks/{track_id}/animated-cover")
 async def get_track_animated_cover(track_id: str):
-    """Get animated cover (video thumbnail) for a track"""
+    """Get animated cover (MP4 video) for track - supports canvas.mp4 or animated_cover.mp4"""
     track = db.get_track(track_id)
     if not track or not track.get("file_path"):
         raise HTTPException(status_code=404, detail="Track not found")
     
     file_path = Path(track["file_path"])
-    animated_cover = file_path.parent / "animated_cover.mp4"
+    folder = file_path.parent
     
-    if not animated_cover.exists():
-        raise HTTPException(status_code=404, detail="Animated cover not found")
+    # Check for canvas.mp4 first (preferred naming)
+    canvas_file = folder / "canvas.mp4"
+    if canvas_file.exists():
+        return FileResponse(canvas_file, media_type="video/mp4")
     
-    return FileResponse(animated_cover, media_type="video/mp4")
+    # Fallback to animated_cover.mp4 (legacy naming)
+    animated_cover = folder / "animated_cover.mp4"
+    if animated_cover.exists():
+        return FileResponse(animated_cover, media_type="video/mp4")
+    
+    raise HTTPException(status_code=404, detail="Canvas video not found (looking for canvas.mp4 or animated_cover.mp4)")
+
+
+@app.get("/tracks/{track_id}/lyrics")
+async def get_track_lyrics(track_id: str):
+    """Get lyrics for a track - returns plain text LRC format"""
+    track = db.get_track(track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+    
+    # Use lyrics from response (which already has fallback logic from GET /tracks/{id})
+    lyrics = track.get("lyrics")
+    
+    if not lyrics:
+        raise HTTPException(status_code=404, detail="Lyrics not available for this track")
+    
+    # Return as plain text with proper Content-Type
+    from fastapi.responses import Response
+    return Response(
+        content=lyrics,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": "inline"}
+    )
+
+
+@app.head("/tracks/{track_id}/lyrics")
+async def check_track_lyrics(track_id: str):
+    """Check if lyrics exist for a track without downloading content"""
+    track = db.get_track(track_id)
+    if not track or not track.get("lyrics"):
+        raise HTTPException(status_code=404, detail="Lyrics not available")
+    return Response(status_code=200)
 
 
 @app.put("/tracks/{track_id}/lyrics")
 async def update_track_lyrics(track_id: str, request: dict):
-    """Update lyrics for a track"""
+    """Update lyrics for a track - updates both database and filesystem"""
+    from pathlib import Path
+    
+    track = db.get_track(track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+    
     lyrics = request.get("lyrics", "")
+    
+    # Update database
     cursor = db.conn.cursor()
     cursor.execute("UPDATE tracks SET lyrics = ? WHERE id = ?", (lyrics, track_id))
     db.conn.commit()
     
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Track not found")
+    
+    # Also write to filesystem for consistency
+    try:
+        file_path = Path(track.get("file_path", ""))
+        if file_path.exists():
+            lyrics_file = file_path.parent / "lyrics.lrc"
+            with open(lyrics_file, 'w', encoding='utf-8') as f:
+                f.write(lyrics)
+            print(f"[LYRICS] Updated lyrics file: {lyrics_file}")
+    except Exception as e:
+        print(f"[LYRICS] Warning: Could not write lyrics file: {e}")
+        # Don't fail the request - database update is primary
     
     return {"message": "Lyrics updated successfully"}
 
@@ -490,10 +577,17 @@ async def get_playlists():
 @app.get("/playlists/{playlist_id}", response_model=PlaylistResponse)
 async def get_playlist(playlist_id: str):
     """Get specific playlist with tracks"""
-    playlist = db.get_playlist(playlist_id)
-    if not playlist:
-        raise HTTPException(status_code=404, detail="Playlist not found")
-    return playlist
+    try:
+        playlist = db.get_playlist(playlist_id)
+        if not playlist:
+            raise HTTPException(status_code=404, detail="Playlist not found")
+        return playlist
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to get playlist {playlist_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving playlist: {str(e)}")
 
 
 @app.post("/playlists", response_model=PlaylistResponse)
@@ -763,6 +857,16 @@ async def download_youtube_audio(
         image_path=None,
         lyrics=info.get('lyrics')
     )
+    
+    # Save lyrics to lyrics.lrc file if available
+    if info.get('lyrics'):
+        try:
+            lyrics_file = file_path_obj.parent / "lyrics.lrc"
+            with open(lyrics_file, 'w', encoding='utf-8') as f:
+                f.write(info['lyrics'])
+            print(f"[LYRICS] Saved lyrics to {lyrics_file}")
+        except Exception as e:
+            print(f"[LYRICS] Error saving lyrics file: {e}")
     
     return {
         "message": "Download complete",

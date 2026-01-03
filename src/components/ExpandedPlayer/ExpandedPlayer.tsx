@@ -1,4 +1,4 @@
-import { FC, useEffect, useRef, useState } from 'react';
+import { FC, memo, useEffect, useRef, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../../store/store';
 import { uiActions } from '../../store/slices/ui';
 import { spotifyActions } from '../../store/slices/spotify';
@@ -7,9 +7,13 @@ import { Link } from 'react-router-dom';
 import { TrackActionsWrapper } from '../Actions/TrackActions';
 import { ArtistActionsWrapper } from '../Actions/ArtistActions';
 import { playerService } from '../../services/player';
+import { Canvas } from './Canvas';
+import { fetchLyrics, parseLyrics } from '../../utils/lyricsService';
 import './ExpandedPlayer.scss';
 
-const ExpandedPlayer: FC = () => {
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+const ExpandedPlayer: FC = memo(() => {
   const dispatch = useAppDispatch();
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const [currentLyricIndex, setCurrentLyricIndex] = useState(0);
@@ -56,7 +60,8 @@ const ExpandedPlayer: FC = () => {
       document.removeEventListener('keydown', handleEsc);
       document.body.style.overflow = '';
     };
-  }, [isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, handleClose]);
 
   // Playback controls
   const handlePlayPause = async () => {
@@ -99,64 +104,30 @@ const ExpandedPlayer: FC = () => {
   // Load assets when track changes
   useEffect(() => {
     if (!currentTrack?.id) {
-      setCoverUrl('');
+      setCoverUrl('/images/playlist.png');
       setAnimatedCoverUrl(null);
       setParsedLyrics(null);
       return;
     }
 
-    // Load cover image (priority: local asset > spotify image > fallback)
-    const trackWithAssets = currentTrack as any;
-    if (trackWithAssets.cover_url) {
-      setCoverUrl(trackWithAssets.cover_url);
-    } else if (currentTrack.album?.images?.[0]?.url) {
-      setCoverUrl(currentTrack.album.images[0].url);
-    } else {
-      setCoverUrl('/images/playlist.png');
-    }
+    // Cover: always use backend cover endpoint
+    setCoverUrl(`${API_URL}/tracks/${currentTrack.id}/cover`);
 
-    // Load animated cover if available
-    setAnimatedCoverUrl(trackWithAssets.animated_cover_url || null);
+    // Canvas: always derived endpoint; Canvas will fallback if video fails
+    setAnimatedCoverUrl(`${API_URL}/tracks/${currentTrack.id}/animated-cover`);
 
-    // Parse lyrics
-    const lyricsText = trackWithAssets.lyrics;
-    if (lyricsText) {
-      const parsed = parseLyricsText(lyricsText);
-      setParsedLyrics(parsed);
-    } else {
-      setParsedLyrics(null);
-    }
+    // Lyrics: fetch from centralized service (prevents duplication with SmoothLyrics)
+    const loadLyrics = async () => {
+      const trackId = currentTrack.id as string;
+      const text = await fetchLyrics(trackId);
+      const parsed = parseLyrics(text);
+      setParsedLyrics(parsed.length > 0 ? parsed : null);
+    };
+
+    loadLyrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack?.id]);
 
-  // LRC Parser - handles timestamped lyrics
-  const parseLyricsText = (lyricsText: string): Array<{ time: number; text: string }> => {
-    const lines = lyricsText.split('\n').filter(line => line.trim());
-    
-    // Check if LRC format (has timestamps like [00:12.00])
-    const isLRC = lines.some(line => /^\[\d{2}:\d{2}\.\d{2}\]/.test(line));
-    
-    if (isLRC) {
-      return lines.map(line => {
-        const match = line.match(/^\[(\d{2}):(\d{2})\.(\d{2})\](.*)$/);
-        if (match) {
-          const [, minutes, seconds, centiseconds, text] = match;
-          const timeMs = (parseInt(minutes) * 60 + parseInt(seconds)) * 1000 + parseInt(centiseconds) * 10;
-          return { time: timeMs, text: text.trim() };
-        }
-        return { time: 0, text: line };
-      });
-    }
-    
-    // Plain text lyrics - estimate timing based on duration
-    if (!playbackState) {
-      return lines.map((text, index) => ({ time: index * 3000, text }));
-    }
-    
-    return lines.map((text, index) => ({
-      time: Math.floor((playbackState.duration / lines.length) * index),
-      text
-    }));
-  };
 
   // Auto-scroll lyrics based on timestamp
   useEffect(() => {
@@ -182,12 +153,12 @@ const ExpandedPlayer: FC = () => {
         });
       }
     }
-  }, [playbackState?.position, parsedLyrics, currentLyricIndex]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackState?.position, parsedLyrics, currentLyricIndex, playbackState]);
 
   if (!isOpen || !currentTrack) return null;
 
   const trackName = currentTrack.name;
-  const artistNames = currentTrack.artists.map((a) => a.name).join(', ');
   const albumName = currentTrack.album?.name;
 
   const progress = playbackState
@@ -218,27 +189,15 @@ const ExpandedPlayer: FC = () => {
         </button>
 
         <div className="expanded-player-content">
-          {/* Album Art Section */}
+          {/* Canvas - Spotify-style visual experience */}
           <div className="album-art-section">
             <div className="album-art-wrapper">
-              {animatedCoverUrl ? (
-                <video
-                  className="album-art-video"
-                  src={animatedCoverUrl}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  poster={coverUrl}
-                  onError={() => setAnimatedCoverUrl(null)}
-                />
-              ) : (
-                <img
-                  src={coverUrl}
-                  alt={`${albumName} artwork`}
-                  className="album-art-image"
-                />
-              )}
+              <Canvas
+                trackId={currentTrack.id!}
+                animatedCoverUrl={animatedCoverUrl}
+                staticCoverUrl={coverUrl}
+                albumName={albumName}
+              />
             </div>
           </div>
 
@@ -303,7 +262,7 @@ const ExpandedPlayer: FC = () => {
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" opacity="0.4">
                   <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
                 </svg>
-                <p>No lyrics available for this track</p>
+                <p>Lyrics not available</p>
               </div>
             </div>
           )}
@@ -366,6 +325,6 @@ const ExpandedPlayer: FC = () => {
       </div>
     </div>
   );
-};
+});
 
-export default ExpandedPlayer;
+export default ExpandedPlayer as typeof ExpandedPlayer;

@@ -244,6 +244,9 @@ class Database:
         # Use placeholder image if no album art exists
         image_url = f"http://localhost:8000{track['image_path']}" if track.get("image_path") else "http://localhost:8000/images/playlist.png"
         
+        # Check if lyrics exist (from DB or would be loaded from file)
+        has_lyrics = bool(track.get("lyrics"))
+        
         return {
             "id": track["id"],
             "name": track["title"],
@@ -260,6 +263,7 @@ class Database:
             "uri": f"local:track:{track['id']}",
             "file_path": track["file_path"],
             "lyrics": track.get("lyrics"),
+            "has_lyrics": has_lyrics,
             "has_enhanced_version": bool(track.get("has_enhanced_version", 0)),
             "enhanced_file_path": track.get("enhanced_file_path"),
             "enhancement_preset": track.get("enhancement_preset")
@@ -408,29 +412,33 @@ class Database:
     def get_playlist(self, playlist_id: str) -> Optional[Dict]:
         """Get playlist with tracks"""
         cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM playlists WHERE id = ?", (playlist_id,))
-        row = cursor.fetchone()
-        
-        if not row:
-            return None
-        
-        playlist = self._format_playlist_response(self._row_to_dict(row))
-        
-        # Get tracks
-        cursor.execute("""
-            SELECT t.* FROM tracks t
-            JOIN playlist_tracks pt ON t.id = pt.track_id
-            WHERE pt.playlist_id = ?
-            ORDER BY pt.position
-        """, (playlist_id,))
-        
-        tracks = cursor.fetchall()
-        playlist["tracks"] = {
-            "total": len(tracks),
-            "items": [{"track": self._format_track_response(self._row_to_dict(t))} for t in tracks]
-        }
-        
-        return playlist
+        try:
+            cursor.execute("SELECT * FROM playlists WHERE id = ?", (playlist_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+            
+            playlist = self._format_playlist_response(self._row_to_dict(row))
+            
+            # Get tracks
+            cursor.execute("""
+                SELECT t.* FROM tracks t
+                JOIN playlist_tracks pt ON t.id = pt.track_id
+                WHERE pt.playlist_id = ?
+                ORDER BY pt.position
+            """, (playlist_id,))
+            
+            tracks = cursor.fetchall()
+            playlist["tracks"] = {
+                "total": len(tracks),
+                "items": [{"track": self._format_track_response(self._row_to_dict(t))} for t in tracks]
+            }
+            
+            return playlist
+        except Exception as e:
+            print(f"[ERROR] Database error in get_playlist({playlist_id}): {e}")
+            raise
     
     def create_playlist(self, name: str, description: Optional[str] = None) -> Dict:
         """Create a new playlist"""

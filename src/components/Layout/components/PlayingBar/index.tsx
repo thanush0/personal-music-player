@@ -6,7 +6,16 @@ import NowPlayingBarMobile from './mobilePlayer';
 import { MobileMenu } from './mobileMenu';
 import { OtherDeviceAlert } from './otherDevice';
 
+import { useAppSelector } from '../../../../store/store';
+
 const NowPlayingBar = () => {
+  const isExpandedOpen = useAppSelector((state) => state.ui.expandedPlayerOpen);
+
+  if (isExpandedOpen) {
+    // Hide the bottom mini-player while expanded player is active
+    return null;
+  }
+
   return (
     <>
       <div>

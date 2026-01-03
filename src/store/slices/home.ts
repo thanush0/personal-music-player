@@ -18,6 +18,7 @@ import { categoriesService } from '../../services/categories';
 
 // Utils
 import { groupBy, uniq, uniqBy } from 'lodash';
+import { deduplicateTracks } from '../../utils/deduplicateTracks';
 
 // Constants
 import { MADE_FOR_YOU_URI, RANKING_URI, TRENDING_URI } from '../../constants/spotify';
@@ -135,11 +136,13 @@ export const fetchRecentlyPlayed = createAsyncThunk('home/fetchRecentlyPlayed', 
 
     const [artistsResponse, albumsResponse] = await Promise.all(promises);
 
-    // @ts-ignore
-    const artists: Artist[] = artistsResponse.data.artists;
+    const artists: Artist[] = Array.isArray((artistsResponse.data as any).artists) 
+      ? (artistsResponse.data as any).artists 
+      : [];
 
-    // @ts-ignore
-    const albums: Album[] = albumsResponse.data.albums;
+    const albums: Album[] = Array.isArray((albumsResponse.data as any).albums) 
+      ? (albumsResponse.data as any).albums 
+      : [];
 
     const tracks = items.map((item) => {
       if (item.context?.type === 'artist' && item.context.uri) {
@@ -192,7 +195,7 @@ const homeSlice = createSlice({
       state.newReleases = action.payload as any as any[];
     });
     builder.addCase(fetchTopTracks.fulfilled, (state, action) => {
-      state.topTracks = action.payload;
+      state.topTracks = deduplicateTracks(action.payload);
     });
     builder.addCase(fecthFeaturedPlaylists.fulfilled, (state, action) => {
       state.featurePlaylists = action.payload;
@@ -201,7 +204,9 @@ const homeSlice = createSlice({
       state.madeForYou = action.payload;
     });
     builder.addCase(fetchRecentlyPlayed.fulfilled, (state, action) => {
-      state.recentlyPlayed = action.payload.filter((item): item is Track | Artist | Album => item !== undefined);
+      const filtered = action.payload.filter((item): item is Track | Artist | Album => item !== undefined);
+      // Deduplicate tracks (merge enhanced and standard quality variants)
+      state.recentlyPlayed = deduplicateTracks(filtered);
     });
     builder.addCase(fetchRanking.fulfilled, (state, action) => {
       state.rankings = action.payload;

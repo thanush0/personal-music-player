@@ -3,7 +3,8 @@ import { PlayCircle } from '../../../../components/Lists/PlayCircle';
 import { TrackActionsWrapper } from '../../../../components/Actions/TrackActions';
 
 // Redux
-import { useAppSelector } from '../../../../store/store';
+import { useAppDispatch, useAppSelector } from '../../../../store/store';
+import { uiActions } from '../../../../store/slices/ui';
 
 // Utils
 import tinycolor from 'tinycolor2';
@@ -26,6 +27,7 @@ interface HorizontalCardProps {
 }
 
 export const HorizontalCard: FC<HorizontalCardProps> = memo(({ item, setColor }) => {
+  const dispatch = useAppDispatch();
   const currentSong = useAppSelector((state) => state.spotify.state?.track_window.current_track.id);
   const isPlaying = useAppSelector((state) => !state.spotify.state?.paused);
   const isCurrent = currentSong === item.id;
@@ -34,8 +36,10 @@ export const HorizontalCard: FC<HorizontalCardProps> = memo(({ item, setColor })
 
   const onClick = useCallback(() => {
     if (isCurrent) return;
+    // Open expanded player when starting a new track
+    dispatch(uiActions.openExpandedPlayer());
     playerService.startPlayback({ uris: [item.uri] });
-  }, [isCurrent, item.uri]);
+  }, [isCurrent, item.uri, dispatch]);
 
   useEffect(() => {
     if (item) getImageAnalysis2(item.album.images[0].url).then();

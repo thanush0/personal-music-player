@@ -37,7 +37,7 @@ const HomePageContainer: FC<HomePageContainerProps> = memo((props) => {
         className='Home-seccion'
         style={{
           paddingTop: isMobile ? 50 : 0,
-          transition: 'background: 5s',
+          transition: 'background 0.5s ease',
           background: `linear-gradient(180deg, ${color} 2%, rgb(18, 18, 18) 18%)`,
         }}
       >

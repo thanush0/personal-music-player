@@ -4,6 +4,9 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { userService } from '../../services/users';
 import { playlistService } from '../../services/playlists';
 
+// Utils
+import { deduplicateTracks } from '../../utils/deduplicateTracks';
+
 // Interface
 import type { RootState } from '../store';
 import type { User } from '../../interfaces/user';
@@ -165,13 +168,13 @@ const profileSlice = createSlice({
     });
     builder.addCase(fetchCurrentUserData.fulfilled, (state, action) => {
       state.artists = action.payload[0];
-      state.songs = action.payload[1];
+      state.songs = deduplicateTracks(action.payload[1]);
     });
     builder.addCase(fetchPlaylists.fulfilled, (state, action) => {
       state.playlists = action.payload.filter((p) => p.public);
     });
     builder.addCase(fetchMyTracks.fulfilled, (state, action) => {
-      state.songs = action.payload;
+      state.songs = deduplicateTracks(action.payload);
     });
   },
 });

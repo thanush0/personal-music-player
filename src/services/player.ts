@@ -70,6 +70,10 @@ const startPlayback = async (
     if (validTracks.length > 0) {
       await localPlayerService.play(validTracks);
     }
+  } else if (body.context_uri) {
+    // For context URI (playlist/album), we need to fetch the tracks from that context
+    // This is not yet implemented - for now just resume playback
+    await localPlayerService.play();
   } else {
     // Just resume
     await localPlayerService.play();

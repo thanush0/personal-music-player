@@ -47,7 +47,7 @@ const Lyrics = memo(() => {
     return (
       <div className='lyrics-container'>
         <div className='lyrics-empty'>
-          <p>No lyrics available for this song</p>
+          <p>Lyrics not available</p>
           <p className='lyrics-hint'>Lyrics will be displayed here when available</p>
         </div>
       </div>

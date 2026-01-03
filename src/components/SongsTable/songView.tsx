@@ -328,6 +328,8 @@ export const SongView = (props: SongViewProps) => {
     if (isCurrent) {
       return playerService.startPlayback();
     }
+    // Open expanded player when starting a new song
+    dispatch(uiActions.openExpandedPlayer());
     return playerService.startPlayback(context);
   }, [user, isCurrent, isPlaying, context, dispatch, song.album?.images]);
 

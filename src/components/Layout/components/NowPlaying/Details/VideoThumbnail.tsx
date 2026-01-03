@@ -29,25 +29,26 @@ export const VideoThumbnail = memo(() => {
     // Check if there's an animated cover available
     const checkAnimatedCover = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/tracks/${song.id}/animated-cover`, {
+        const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${API_URL}/tracks/${song.id}/animated-cover`, {
           method: 'HEAD'
         });
         
         if (response.ok) {
           setHasVideo(true);
           if (videoRef.current) {
-            videoRef.current.src = `http://localhost:8000/tracks/${song.id}/animated-cover`;
+            videoRef.current.src = `${API_URL}/tracks/${song.id}/animated-cover`;
             videoRef.current.load();
           }
         } else {
           setHasVideo(false);
           // Use cover.jpg if available, otherwise fallback to album art
-          const coverResponse = await fetch(`http://localhost:8000/tracks/${song.id}/cover`, {
+          const coverResponse = await fetch(`${API_URL}/tracks/${song.id}/cover`, {
             method: 'HEAD'
           });
           
           if (coverResponse.ok) {
-            setImageUrl(`http://localhost:8000/tracks/${song.id}/cover`);
+            setImageUrl(`${API_URL}/tracks/${song.id}/cover`);
           } else {
             setImageUrl(song.album?.images?.[0]?.url || '');
           }

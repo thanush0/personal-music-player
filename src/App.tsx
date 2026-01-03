@@ -8,7 +8,7 @@ import { FC, Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef } fro
 import { getFromLocalStorageWithExpiry } from './utils/localstorage';
 
 // Components
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, App as AntApp } from 'antd';
 import { AppLayout } from './components/Layout';
 import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -254,13 +254,15 @@ function App() {
   return (
     <ErrorBoundary>
       <ConfigProvider theme={{ token: { fontFamily: 'SpotifyMixUI' } }}>
-        <Provider store={store}>
-          <PersistGate loading={null} persistor={persistor}>
-            <SpotifyContainer>
-              <RootComponent />
-            </SpotifyContainer>
-          </PersistGate>
-        </Provider>
+        <AntApp>
+          <Provider store={store}>
+            <PersistGate loading={null} persistor={persistor}>
+              <SpotifyContainer>
+                <RootComponent />
+              </SpotifyContainer>
+            </PersistGate>
+          </Provider>
+        </AntApp>
       </ConfigProvider>
     </ErrorBoundary>
   );

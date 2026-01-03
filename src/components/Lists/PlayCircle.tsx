@@ -34,6 +34,12 @@ export const PlayCircle: FC<PlayCircleProps> = ({ size = 20, big, isCurrent, con
       if (isCurrent && !paused) {
         return playerService.pausePlayback().then();
       }
+      
+      // Open expanded player when starting a new track
+      if (!isCurrent) {
+        dispatch(uiActions.openExpandedPlayer());
+      }
+      
       const request = isCurrent
         ? playerService.startPlayback()
         : playerService.startPlayback(context);
